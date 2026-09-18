@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "autoshop": {
+      "command": "C:/tools/autoshop-mcp/.venv/Scripts/python.exe",
+      "args": [
+        "-m",
+        "autoshop_mcp",
+        "serve"
+      ],
+      "env": {
+        "AUTOSHOP_INSTALL_DIR": "C:/Program Files (x86)/AutoShop"
+      }
+    }
+  }
+}

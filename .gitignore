@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+*.exe
+*.obj
+*.pdb
+*.dll
+*.zip
+*.rar
+.env
+local/

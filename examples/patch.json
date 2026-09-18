@@ -1,0 +1,8 @@
+{
+  "project": "C:/PLC/converted-001/project",
+  "file": "MAIN.IL",
+  "expected_sha256": "REPLACE_WITH_SHA_FROM_IL_READ",
+  "old_text": "OUT\t\t Y1\n",
+  "new_text": "OUT\t\t Y2\n",
+  "dest": "C:/PLC/edited-001"
+}
