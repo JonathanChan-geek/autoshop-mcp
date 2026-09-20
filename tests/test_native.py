@@ -163,6 +163,68 @@ class NativeTests(unittest.TestCase):
                     self.assertFalse(result['native_compiled'])
                     self.assertTrue(any('INVALID_PLC_OPCODE' in d['text'] for d in result['stages'][-1]['diagnostics']))
 
+    def test_il_to_ld_equivalent_or_explicitly_rejected_on_both_projects(self):
+        for group, source in enumerate([self.src, LOADER]):
+            successful = 0
+            for n, item in enumerate(hcp.project_meta_from_dir(str(source))['files']):
+                if item['file_type'] != 0:
+                    continue
+                with self.subTest(project=group, file=item['file_name']):
+                    result = core.run_tool('il_to_ld_copy', dict(project=str(source), file=item['file_name'],
+                                          dest=str(self.root/f'reverse-{group}-{n}')))
+                    if not result['ok']:
+                        self.assertIn(result['error']['code'], ['conversion_roundtrip_failed','conversion_not_equivalent'], result)
+                        self.assertFalse((self.root/f'reverse-{group}-{n}'/'compiled'/'project').exists())
+                        self.assertFalse((self.root/f'reverse-{group}-{n}'/'compiled'/'compiled-project.zip').exists())
+                        continue
+                    successful += 1
+                    self.assertTrue(result['il_roundtrip_equal'])
+                    self.assertEqual(result['output_sha256'], compiler.sha(source/'Output.prg'))
+                    delivered = Path(result['project'])
+                    self.assertFalse((delivered/item['file_name']).exists())
+                    self.assertTrue((delivered/result['new_file']).is_file())
+                    registered = hcp.project_meta_from_dir(str(delivered))['files']
+                    self.assertEqual(next(f for f in registered if f['id']==item['id'])['file_type'], 1)
+            self.assertGreater(successful, 0, 'Each real project needs an actually accepted reverse conversion')
+
+    def test_symbols_chinese_append_update_and_fresh_reload(self):
+        read = core.run_tool('symbols_read', dict(project=str(self.src)))
+        self.assertTrue(read['ok'], read)
+        changes = [dict(index=-1, name='验证符号', address='M6000', comment='中文注释\n第二行')]
+        added = core.run_tool('symbols_patch_copy', dict(project=str(self.src), dest=str(self.root/'symbols-add'),
+                             expected_sha256=read['sha256'], changes=changes))
+        self.assertTrue(added['ok'], added)
+        self.assertEqual(added['output_sha256'], self.before['Output.prg'])
+        second = core.run_tool('symbols_read', dict(project=added['project']))
+        self.assertEqual(second['rows'][-1]['name'], '验证符号')
+        self.assertEqual(second['rows'][-1]['comment'], '中文注释\n第二行')
+        changes[0].update(index=second['rows'][-1]['index'], name='ModifiedSymbol', comment='更新注释')
+        updated = core.run_tool('symbols_patch_copy', dict(project=added['project'], dest=str(self.root/'symbols-update'),
+                               expected_sha256=second['sha256'], changes=changes))
+        self.assertTrue(updated['ok'], updated)
+        third = core.run_tool('symbols_read', dict(project=updated['project']))
+        self.assertEqual(third['rows'][-1]['name'], 'ModifiedSymbol')
+        self.assertEqual(third['rows'][-1]['comment'], '更新注释')
+        self.assertEqual(len(third['rows']), len(read['rows'])+1)
+        final = compiler.inventory(Path(updated['project']))
+        self.assertEqual([n for n,v in self.before.items() if not compiler.derived(n) and final.get(n)!=v], ['VarList.gdt'])
+
+    def test_symbol_configuration_mutation_never_publishes(self):
+        from autoshop_mcp import symbols
+        real = symbols._run
+        def tamper(work, root, runtime, meta, xml, request=None):
+            rows = real(work, root, runtime, meta, xml, request)
+            if request:
+                (work/'MAIN.dat').write_bytes(b'changed')
+            return rows
+        with patch.object(symbols, '_run', side_effect=tamper):
+            result = core.run_tool('symbols_patch_copy', dict(project=str(self.src), dest=str(self.root/'rejected-symbols'),
+                         expected_sha256=self.before['VarList.gdt'],
+                         changes=[dict(index=-1,name='DemoSymbol',address='M6000',comment='test')]))
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['error']['code'], 'configuration_changed')
+        self.assertFalse((self.root/'rejected-symbols').exists())
+
 
 if __name__ == "__main__":
     unittest.main()

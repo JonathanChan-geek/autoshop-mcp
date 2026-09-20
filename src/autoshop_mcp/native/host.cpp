@@ -56,14 +56,22 @@ bool fingerprint(const char* path,const char* expected){
  {char hex[65];for(int i=0;i<32;i++)sprintf_s(hex+i*2,65-i*2,"%02x",digest[i]);ok=strcmp(hex,expected)==0;}
  done:if(h)BCryptDestroyHash(h);if(a)BCryptCloseAlgorithmProvider(a,0);CloseHandle(f);return ok;
 }
+#include "symbols.h"
 int main(int argc,char**argv) {
   SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX|SEM_NOOPENFILEERRORBOX);
   CoInitializeEx(0,COINIT_APARTMENTTHREADED);
   SetUnhandledExceptionFilter(unhandled);
-  if(argc!=6&&argc!=7)return 2;
-  bool convert=argc==7;
+  if(argc<6||argc>8)return 2;
+  bool symbols=argc>=7&&(strcmp(argv[6],"symbols-read")==0||strcmp(argv[6],"symbols-write")==0);
+  bool convert=argc>=7&&!symbols;
+  int direction=convert&&argc==8?atoi(argv[7]):0;
+  if(convert&&(strspn(argv[6],"0123456789")!=strlen(argv[6])||!strlen(argv[6])))return 2;
+  if(convert&&argc==8&&strcmp(argv[7],"0")&&strcmp(argv[7],"1"))return 2;
+  if(symbols&&((strcmp(argv[6],"symbols-read")==0&&argc!=7)||(strcmp(argv[6],"symbols-write")==0&&argc!=8)))return 2;
   char library[MAX_PATH];
   for(int i=0;i<4;i++){sprintf_s(library,"%s\\%s",argv[3],profileFiles[i]);if(!fingerprint(library,profileHashes[i])){printf("version_rejected=%s\n",profileFiles[i]);return 20;}}
+  // Some vendor constructors create relative files before ExecuteCompile starts.
+  if(!SetCurrentDirectoryA(argv[2])){printf("workspace_directory_failed\n");return 23;}
   ACTCTXA ac={sizeof(ac)}; ac.lpSource=argv[1];
   HANDLE h=CreateActCtxA(&ac);ULONG_PTR cookie=0;
   if(h==INVALID_HANDLE_VALUE||!ActivateActCtx(h,&cookie)){printf("activation_failed %lu\n",GetLastError());return 3;}
@@ -131,6 +139,11 @@ int main(int argc,char**argv) {
       typedef void (__thiscall *SetString)(void*,DWORD*);
       ((SetString)GetProcAddress(g,"?SetHardwareFile@CDataManageCenter@@QAEXABV?$CStringT@DV?$StrTraitMFC_DLL@DV?$ChTraitsCRT@D@ATL@@@@@ATL@@@Z"))(obj,&hwname);
       ((Dtor)GetProcAddress(mfc,MAKEINTRESOURCEA(601)))(&hwname);
+      if(symbols){
+        if(!result)return 31;
+        int status=symbols_command(g,obj,files[0],argc==8?argv[7]:0);
+        dtor(obj);return status;
+      }
       typedef void* (__thiscall *CompilerFactory)(void*,void*,void*,int,void*,int);
       char compilerMaker=0;
       auto compileFactory=(CompilerFactory)GetProcAddress(c,"?CreateCompiler@ICompilerCreater@@QAEPAVICompileExecuter@@PAV?$CList@UtagFileProp@@AAU1@@@PAVCWnd@@W4EnumCmpOption@@PAVCDataManageCenter@@H@Z");
@@ -144,7 +157,7 @@ int main(int argc,char**argv) {
       ((Dtor)GetProcAddress(g,"?SetStepInfoValid@CDataManageCenter@@QAEXXZ"))(obj);
       typedef void* (__thiscall *ConvertFactory)(void*,void*,void*,int,void*);
       auto convertFactory=(ConvertFactory)GetProcAddress(c,"?CreateConverter@ICompilerCreater@@QAEPAVICompileExecuter@@PAV?$CList@UtagFileProp@@AAU1@@@PAVCWnd@@W4EnumConvertType@@PAVCDataManageCenter@@@Z");
-      void* compiler=convert?convertFactory(&compilerMaker,list,wnd,0,obj):compileFactory(&compilerMaker,list,wnd,2,obj,0);
+      void* compiler=convert?convertFactory(&compilerMaker,list,wnd,direction,obj):compileFactory(&compilerMaker,list,wnd,2,obj,0);
       printf("compiler_created=%d\n",compiler!=0);fflush(stdout);
       if(argc>5){
         SetCurrentDirectoryA(argv[2]);

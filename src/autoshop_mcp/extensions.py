@@ -1,5 +1,5 @@
 """Tool metadata for analysis and transactional workflows."""
-from . import analysis, workflows
+from . import analysis, workflows, symbols, compiler
 
 
 def arg(kind, help, required=False, **extra):
@@ -25,6 +25,18 @@ def spec(name, handler, summary, **params):
 
 
 TOOLS = [
+    spec('il_to_ld_copy', compiler.il_to_ld_copy, '原厂 IL 转梯形图；独立回读 IL、清缓存编译并要求机器码一致后交付。',
+         project=PROJECT, file=arg('str','工程索引登记的 IL 文件名',True), dest=DEST, install_dir=INSTALL),
+    spec('symbols_read', symbols.symbols_read, '原厂接口读取全局符号名称、地址、注释；只在工程副本中运行。',
+         project=PROJECT, install_dir=INSTALL),
+    spec('symbols_patch_copy', symbols.symbols_patch_copy, '新增或修改全局符号，独立进程回读并要求前后机器码一致；只交付新副本。',
+         project=PROJECT, dest=DEST, install_dir=INSTALL,
+         expected_sha256=arg('str','symbols_read 返回的 VarList.gdt SHA256',True),
+         changes=arg('list','完整行字段；index=-1 新增，其他值修改原行，不支持删除',True,
+                     items={'type':'object','properties':{'index':{'type':'integer','minimum':-1},
+                         'name':{'type':'string'},'address':{'type':'string'},'comment':{'type':'string'}},
+                         'required':['index','name','address','comment'],'additionalProperties':False},
+                     minItems=1,maxItems=100)),
     spec('project_search', analysis.project_search, '搜索已登记 IL 的字面文本，返回文件、行号和上下文；明确未覆盖的 LD/保护块。',
          project=PROJECT, query=arg('str','查找的字面文本，不是正则表达式',True),
          case_sensitive=arg('bool','是否区分大小写，默认 false'),

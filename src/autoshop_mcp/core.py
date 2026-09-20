@@ -70,7 +70,7 @@ FORMAT_MATRIX = [
         "read": True,
         "write": False,
         "support": "parse_only",
-        "note": "解码为 UTF-16 XML 后只读解析（机型/文件表/版本），字节原样保留。",
+        "note": "读取机型/文件表/版本；语言转换工具在副本中精确更新对应块的文件名和类型。",
     },
     {
         "format": "纯明文 .IL POU",
@@ -82,12 +82,19 @@ FORMAT_MATRIX = [
     {
         "format": ".LD 梯形图 POU",
         "read": False,
-        "write": False,
-        "support": "read_only_ld",
-        "note": "可用 ld_to_il_copy 经原厂转换并验证机器码等价，再修改 IL。",
+        "write": "verified_conversion_only",
+        "support": "native_conversion",
+        "note": "ld_to_il_copy 转为 IL；il_to_ld_copy 转回梯形图，回读及机器码一致才交付。",
     },
     {
-        "format": "工程内容中本工具无法解释的文件（MAIN.dat 软元件内存、MAIN.mon 用户监视表、*.cfg/*.ini/*.sdt/*.gdt/*.dev、CANLink.prg 等）",
+        "format": "VarList.gdt 全局符号表",
+        "read": "native_only",
+        "write": "verified_new_copy_only",
+        "support": "native_symbols",
+        "note": "symbols_read / symbols_patch_copy 读取、新增、修改名称地址注释；独立回读和机器码一致才交付，不支持删除。",
+    },
+    {
+        "format": "工程内容中本工具无法解释的文件（MAIN.dat 软元件内存、MAIN.mon 用户监视表、*.cfg/*.ini/*.sdt/其他 *.gdt/*.dev、CANLink.prg 等）",
         "read": False,
         "write": False,
         "support": "opaque",

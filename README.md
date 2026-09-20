@@ -7,7 +7,7 @@
 
 本项目提供 Python 工具层和一个独立的 x86 原生进程。原生进程调用本机 AutoShop 的编译、转换 DLL，不启动 AutoShop 主程序，不模拟鼠标键盘。适合接入 AI 编程工具，也可以直接写脚本调用。
 
-**0.3.0：新增 7 个工具，共 16 个。** 可以批量改多个程序块、一次完成编译打包、把整个工程转成 IL，并查询信号在各程序段的引用。新增静态检查和审查导出；不将静态结果当作动作仿真。
+**0.4.0：新增 IL 转梯形图、全局符号表读取和写回，共 19 个工具。** 已用原厂接口验证，转换和写回都要经过独立回读、重新编译和机器码对照。完整 H3U 运行仿真尚未打通，具体调查结果见 [验证记录](docs/verification-0.4.md)。
 
 目前适配一个经过验证的 H3U 运行库组合，**不是通用 AutoShop SDK**。是否兼容以 DLL 的 SHA-256 为准，不能只看安装目录或软件版本号。原厂 DLL、安装包和现场 PLC 工程均不随本项目发布。
 
@@ -24,6 +24,9 @@
 | `native_compile_probe` | 静态检查 PE 文件和导出，不执行 DLL |
 | `native_compile_copy` | 调用原厂编译器，生成经过检查的新工程和 ZIP |
 | `ld_to_il_copy` | 原厂 LD → IL 转换，转换前后机器码一致才交付副本 |
+| `il_to_ld_copy` | 原厂 IL → LD，回读 IL 并核对机器码；原厂重排分支导致指令变化时拒绝交付 |
+| `symbols_read` | 读取全局符号表中的名称、地址、注释和文件哈希 |
+| `symbols_patch_copy` | 新增或修改全局符号；独立回读、机器码不变、其他配置不变才交付 |
 | `project_convert_all_copy` | 整工程 LD → IL，逐块验证等价后统一编译打包 |
 | `il_batch_patch_copy` | 多文件、多处补丁同时校验，全部通过才生成副本 |
 | `project_build_copy` | 可选转换、批量修改、原厂编译和打包的一次调用 |
@@ -95,6 +98,25 @@ $env:AUTOSHOP_INSTALL_DIR = 'C:\Program Files (x86)\AutoShop'
 
 `package_project` 只做离线打包，不表示原生编译成功。`native_compile_probe` 也只是静态检查，不能代替编译。
 
+### 转回梯形图与符号表写回
+
+修改 IL 后，调用 `il_to_ld_copy`，参数为 `project`、`file`、`dest`。它生成真正的 LD 文件、更新工程登记、移除副本中的旧 IL，并重新编译。回读比较只忽略空行和指令名后的分隔空白；指令、操作数或注释变化都会拒绝，机器码也必须完全相同。**不是所有 IL 都能通过**：部分分支被原厂重排 `MPS/MRD/MPP`，本版本会明确报错并保留原工程。
+
+`symbols_read` 返回 `VarList.gdt` 的 SHA-256 和每行 `index/name/address/comment`。将哈希传给 `symbols_patch_copy`：
+
+```json
+{
+  "project": "C:/PLC/source",
+  "dest": "C:/PLC/symbols-001",
+  "expected_sha256": "替换成 symbols_read 返回的 SHA-256",
+  "changes": [
+    {"index": -1, "name": "FeedReady", "address": "M100", "comment": "送料准备完成"}
+  ]
+}
+```
+
+`index: -1` 表示新增；已有行用读取到的 index 修改，四个字段必须齐全。支持 GBK 中文和多行注释。当前只接受直接地址，拒绝新增重名或重地址，不支持删除、局部符号表或结构化配置编辑。地址语法检查不代表物理端子存在；写回必须保持机器码不变，不能借此重映射程序逻辑。
+
 ### 批量修改与一键编译
 
 `il_batch_patch_copy` 和 `project_build_copy` 使用同一种补丁结构：
@@ -157,6 +179,8 @@ $env:AUTOSHOP_INSTALL_DIR = 'C:\Program Files (x86)\AutoShop'
 - 检查原厂错误信息、编译完成信号，以及连续两次一致的新机器码。
 - 检查源文件和配置字节是否被编译器改动；异常时不交付工程包。
 - LD → IL 转换会分别编译转换前后的工程，比较机器码是否逐字节一致。
+- IL → LD 额外检查转回 IL 的结果；新 LD 首次编译产生的原厂格式整理只允许影响目标块，随后再次回读及严格编译。
+- 符号表写回只允许改变 VarList.gdt，并在新进程中读取验证、比较修改前后机器码。
 
 实现与限制见 [原生后端说明](docs/native-backend.md)。
 
