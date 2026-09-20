@@ -120,10 +120,20 @@ def _plan(rows, changes):
             expected[index] = row
         lines.append(str(index)+'\t'+'\t'.join(fields)+'\n')
     # Allow untouched legacy aliases, but never introduce another ambiguous name/address.
+    def key_for(field, value):
+        if field == 'address':
+            match = re.fullmatch(r'([A-Za-z]+)(\d+)', value)
+            if match:
+                prefix = match[1].upper()
+                try:
+                    return prefix, int(match[2], 8 if prefix in ('X', 'Y') else 10)
+                except ValueError:
+                    pass  # Preserve unrecognized legacy rows without reinterpreting them.
+        return value.casefold()
     for change in changes:
         for field in ('name', 'address'):
-            key = change[field].casefold()
-            if sum(r[field].casefold() == key for r in expected) > 1:
+            key = key_for(field, change[field])
+            if sum(key_for(field, r[field]) == key for r in expected) > 1:
                 raise ToolError('duplicate_symbol', '修改后存在重复名称或地址。', {'field':field})
     return expected, ''.join(lines)
 

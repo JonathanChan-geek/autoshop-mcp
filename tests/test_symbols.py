@@ -28,3 +28,9 @@ class SymbolTests(unittest.TestCase):
                       dict(comment='😀'),dict(address='X8'),dict(comment='x'*4096)]:
             with self.subTest(delta=delta), self.assertRaises(ToolError):
                 symbols._plan([], [dict(base,**delta)])
+
+    def test_equivalent_address_spellings_are_duplicate(self):
+        for address, alias in [('M1','M001'), ('X10','X010')]:
+            rows = [dict(index=0,name='Existing',address=address,comment='',check_result=0)]
+            with self.subTest(address=address), self.assertRaises(ToolError):
+                symbols._plan(rows, [dict(index=-1,name='New',address=alias,comment='')])
