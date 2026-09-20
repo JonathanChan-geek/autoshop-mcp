@@ -8,6 +8,10 @@ from autoshop_mcp import compiler
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_unconfigured_install_does_not_scan_system_libraries(self):
+        with patch.dict(os.environ, {}, clear=True), patch.object(Path, 'glob', side_effect=AssertionError('unexpected system scan')):
+            self.assertFalse(compiler.runtime_status()['available'])
+
     def test_unconfigured_install_is_unavailable(self):
         with patch.dict(os.environ, {}, clear=True):
             result = compiler.runtime_status()

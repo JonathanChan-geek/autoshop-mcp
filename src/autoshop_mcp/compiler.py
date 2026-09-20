@@ -51,8 +51,10 @@ def runtime_status(install_dir: str | None = None) -> dict:
             if not p.is_file() or sha(p) != expected:
                 failures.append(name)
     explicit_mfc = os.environ.get("AUTOSHOP_MFC_PATH")
-    candidates = [Path(explicit_mfc)] if explicit_mfc else []
-    if not explicit_mfc and os.name == "nt":
+    candidates = [Path(explicit_mfc)] if explicit_mfc and not failures else []
+    # Without a valid vendor installation, scanning WinSxS cannot make this
+    # backend available and can stall capabilities on a cold Windows runner.
+    if not explicit_mfc and os.name == "nt" and not failures:
         if root:
             candidates.extend([root / "mfc90.dll", root / "Microsoft.VC90.MFC/mfc90.dll"])
         sxs = Path(os.environ.get("WINDIR", "C:/Windows")) / "WinSxS"
