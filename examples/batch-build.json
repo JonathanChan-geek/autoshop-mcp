@@ -1,0 +1,13 @@
+{
+  "project": "C:/PLC/source",
+  "dest": "C:/PLC/build-002",
+  "patches": [
+    {
+      "file": "MAIN.IL",
+      "expected_sha256": "REPLACE_WITH_SHA_FROM_IL_READ",
+      "edits": [
+        {"old_text": "OUT\t\t Y1\n", "new_text": "OUT\t\t Y2\n"}
+      ]
+    }
+  ]
+}

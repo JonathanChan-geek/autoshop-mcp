@@ -938,6 +938,8 @@ TOOL_SPECS.append({
     },
 })
 
+from .extensions import TOOLS as EXTENSION_TOOLS
+TOOL_SPECS.extend(EXTENSION_TOOLS)
 TOOLS_BY_NAME: Dict[str, Dict[str, Any]] = {spec["name"]: spec for spec in TOOL_SPECS}
 
 

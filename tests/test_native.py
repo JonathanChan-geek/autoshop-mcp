@@ -135,6 +135,34 @@ class NativeTests(unittest.TestCase):
                     self.assertTrue(read["ok"], read)
                     self.assertTrue(read["text"])
 
+    def test_complete_conversion_workflow_has_full_analysis_coverage(self):
+        result = core.run_tool('project_convert_all_copy', dict(project=str(self.src), dest=str(self.root/'all-il')))
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['output_sha256'], self.before['Output.prg'])
+        self.assertTrue(result['binary_equivalent'])
+        audit = core.run_tool('project_audit', dict(project=result['project']))
+        self.assertTrue(audit['complete_source_coverage'], audit['skipped_blocks'])
+        self.assertGreater(len(audit['analyzed_blocks']), 1)
+        self.assertEqual((Path(result['project'])/'MAIN.dat').read_bytes(), (self.src/'MAIN.dat').read_bytes())
+
+    def test_batch_build_and_bad_build_publish_correctly(self):
+        name, old, new = self.output_edit()
+        for label, replacement, succeeds in [('valid',new,True), ('invalid',old.replace('OUT','INVALID_PLC_OPCODE',1),False)]:
+            with self.subTest(label=label):
+                dest = self.root/label
+                result = core.run_tool('project_build_copy', dict(project=str(self.src), dest=str(dest),
+                    patches=[dict(file=name, expected_sha256=self.before[name],
+                                  edits=[dict(old_text=old,new_text=replacement)])]))
+                self.assertEqual(result['ok'], succeeds, result)
+                self.assertEqual((dest/'project').exists(), succeeds)
+                self.assertEqual((dest/'compiled-project.zip').exists(), succeeds)
+                if succeeds:
+                    self.assertNotEqual(result['output_sha256'], self.before['Output.prg'])
+                    self.assertTrue(result['configuration_unchanged'])
+                else:
+                    self.assertFalse(result['native_compiled'])
+                    self.assertTrue(any('INVALID_PLC_OPCODE' in d['text'] for d in result['stages'][-1]['diagnostics']))
+
 
 if __name__ == "__main__":
     unittest.main()

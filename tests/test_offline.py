@@ -90,11 +90,19 @@ class OfflineTests(unittest.TestCase):
             async with stdio_client(StdioServerParameters(command=sys.executable,args=['-m','autoshop_mcp.server'], env={'PYTHONPATH': str(Path(__file__).resolve().parents[1]/'src')})) as (reader,writer):
                 async with ClientSession(reader,writer,read_timeout_seconds=15) as client:
                     await client.initialize()
-                    tools=await client.list_tools();self.assertEqual(len(tools.tools),9)
+                    tools=await client.list_tools();self.assertEqual(len(tools.tools),len(core.TOOL_SPECS))
                     result=await client.call_tool('capabilities',{});self.assertFalse(result.is_error)
                     body=json.loads(result.content[0].text);self.assertEqual(body['native_compile']['backend'], 'vendor-dll-x86-child')
                     result=await client.call_tool('il_read',{'project':str(self.src),'file':NAME});self.assertFalse(result.is_error)
                     result=await client.call_tool('il_read',{'project':str(self.src),'file':'../bad'});self.assertTrue(result.is_error)
+                    result=await client.call_tool('project_xref',{'project':str(self.src),'device':'Y1'})
+                    self.assertFalse(result.is_error,result)
+                    body=json.loads(result.content[0].text)
+                    self.assertEqual(body['references'][0]['access'],'write')
+                    result=await client.call_tool('il_batch_patch_copy',{'project':str(self.src),'dest':str(self.root/'mcp-patched'),
+                        'patches':[{'file':NAME,'expected_sha256':self.original[NAME],
+                                    'edits':[{'old_text':'OUT\t\t Y1\n','new_text':'OUT\t\t Y2\n'}]}]})
+                    self.assertFalse(result.is_error,result)
 
 
         asyncio.run(run())

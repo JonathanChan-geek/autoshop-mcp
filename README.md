@@ -7,6 +7,8 @@
 
 本项目提供 Python 工具层和一个独立的 x86 原生进程。原生进程调用本机 AutoShop 的编译、转换 DLL，不启动 AutoShop 主程序，不模拟鼠标键盘。适合接入 AI 编程工具，也可以直接写脚本调用。
 
+**0.3.0：新增 7 个工具，共 16 个。** 可以批量改多个程序块、一次完成编译打包、把整个工程转成 IL，并查询信号在各程序段的引用。新增静态检查和审查导出；不将静态结果当作动作仿真。
+
 目前适配一个经过验证的 H3U 运行库组合，**不是通用 AutoShop SDK**。是否兼容以 DLL 的 SHA-256 为准，不能只看安装目录或软件版本号。原厂 DLL、安装包和现场 PLC 工程均不随本项目发布。
 
 ## 能做什么
@@ -22,6 +24,13 @@
 | `native_compile_probe` | 静态检查 PE 文件和导出，不执行 DLL |
 | `native_compile_copy` | 调用原厂编译器，生成经过检查的新工程和 ZIP |
 | `ld_to_il_copy` | 原厂 LD → IL 转换，转换前后机器码一致才交付副本 |
+| `project_convert_all_copy` | 整工程 LD → IL，逐块验证等价后统一编译打包 |
+| `il_batch_patch_copy` | 多文件、多处补丁同时校验，全部通过才生成副本 |
+| `project_build_copy` | 可选转换、批量修改、原厂编译和打包的一次调用 |
+| `project_search` | 搜索 IL 文本，返回文件、行号和上下文 |
+| `project_xref` | 查询显式地址的引用位置和已识别指令的读写分类 |
+| `project_audit` | 列出缺失文件、多处 OUT、跨程序块写入等复核线索 |
+| `project_export` | 导出 UTF-8 指令文本、引用表、检查结果和哈希清单 |
 
 暂不提供 ST、H5U、受保护工程的原生编译，也不提供连接 PLC、下载、运行或停止接口。编译成功说明通过了编译检查，不等于设备动作已完成现场验证。
 
@@ -85,6 +94,40 @@ $env:AUTOSHOP_INSTALL_DIR = 'C:\Program Files (x86)\AutoShop'
 5. `project_diff` 核对范围，再用 `native_compile_copy` 编译修改副本。
 
 `package_project` 只做离线打包，不表示原生编译成功。`native_compile_probe` 也只是静态检查，不能代替编译。
+
+### 批量修改与一键编译
+
+`il_batch_patch_copy` 和 `project_build_copy` 使用同一种补丁结构：
+
+```json
+{
+  "project": "C:/PLC/source",
+  "dest": "C:/PLC/build-002",
+  "patches": [
+    {
+      "file": "MAIN.IL",
+      "expected_sha256": "替换成 il_read 返回的 64 位 SHA-256",
+      "edits": [
+        {"old_text": "OUT\t\t Y1\n", "new_text": "OUT\t\t Y2\n"}
+      ]
+    }
+  ]
+}
+```
+
+每个文件列一次，`edits` 可列多处。所有替换都以**修改前的文本**定位，要求唯一匹配且区间不重叠。后面的替换不会意外命中前面新写入的内容。任一文件检查失败都不会交付部分修改的工程。
+
+把参数保存后调用 `project_build_copy`，可直接得到编译包。只要修改副本时调用 `il_batch_patch_copy`。如果还需要转换，建议先调用 `project_convert_all_copy`，读取转换后 IL 的哈希，再准备补丁；`convert_all: true` 合并执行时也必须使用转换后的 IL 哈希。
+
+### 查信号、查交叉写入
+
+```json
+{"project": "C:/PLC/all-il/project", "device": "Y2"}
+```
+
+将上述参数交给 `project_xref` 可查询 Y2 的显式引用。`project_audit` 查多处 OUT、跨块写入及缺失文件；`project_search` 可按字面文本找指令、常数或注释。
+
+这些工具只分析已登记的未保护 IL，返回 `skipped_blocks` 和 `complete_source_coverage`。要读完整源程序，先转换全部 LD。地址引用**不展开双字隐含的相邻寄存器、批量范围、位地址和间接地址**；未知指令返回 `unknown`。没有搜索结果不能据此断言某个地址绝对未使用，多处写入也不一定表示逻辑错误。详细边界见 [能力说明](docs/capabilities.md)。
 
 ## 接入 MCP
 
